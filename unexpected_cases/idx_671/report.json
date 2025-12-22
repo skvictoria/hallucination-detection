@@ -1,0 +1,15 @@
+{
+  "dataset_idx": 671,
+  "question": "Why might covering its eggs with its body increase the reproductive success of a snail leech? Complete the claim below that answers this question and is best supported by the passage.\nCovering its eggs with its body increases the chances that ().",
+  "visual_cued": 1,
+  "pred_orig": "yes",
+  "p_orig": 0.2594200372695923,
+  "pred_blank": "yes",
+  "p_blank": 0.2019786238670349,
+  "swap_same_rate": 1.0,
+  "swap_mean_js": 0.04194515710696578,
+  "swap_mean_kl": 0.17063439823687077,
+  "kl_blank": 0.18912754952907562,
+  "js_blank": 0.04533517360687256,
+  "delta_p_blank": -0.05744141340255737
+}

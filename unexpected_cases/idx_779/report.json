@@ -1,0 +1,15 @@
+{
+  "dataset_idx": 779,
+  "question": "What is the direction of this push?",
+  "visual_cued": 1,
+  "pred_orig": "right",
+  "p_orig": 0.38117197155952454,
+  "pred_blank": "right",
+  "p_blank": 0.4249047040939331,
+  "swap_same_rate": 0.875,
+  "swap_mean_js": 0.0549126376863569,
+  "swap_mean_kl": 0.21259052865207195,
+  "kl_blank": 0.13930147886276245,
+  "js_blank": 0.03111664019525051,
+  "delta_p_blank": 0.04373273253440857
+}

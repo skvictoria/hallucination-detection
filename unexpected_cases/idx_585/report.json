@@ -1,0 +1,15 @@
+{
+  "dataset_idx": 585,
+  "question": "What is the probability that a cat produced by this cross will have long fur?",
+  "visual_cued": 1,
+  "pred_orig": "0",
+  "p_orig": 0.46230456233024597,
+  "pred_blank": "0",
+  "p_blank": 0.18040204048156738,
+  "swap_same_rate": 1.0,
+  "swap_mean_js": 0.01792038872372359,
+  "swap_mean_kl": 0.07387140661012381,
+  "kl_blank": 0.23808273673057556,
+  "js_blank": 0.05555158294737339,
+  "delta_p_blank": -0.2819025218486786
+}

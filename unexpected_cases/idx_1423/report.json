@@ -1,0 +1,15 @@
+{
+  "dataset_idx": 1423,
+  "question": "Which specific humidity level was measured within the outlined area shown?",
+  "visual_cued": 1,
+  "pred_orig": "high",
+  "p_orig": 0.5217311382293701,
+  "pred_blank": "high",
+  "p_blank": 0.4332024157047272,
+  "swap_same_rate": 0.875,
+  "swap_mean_js": 0.025489902938716114,
+  "swap_mean_kl": 0.10385091230273247,
+  "kl_blank": 0.09329098463058472,
+  "js_blank": 0.02355624921619892,
+  "delta_p_blank": -0.08852872252464294
+}

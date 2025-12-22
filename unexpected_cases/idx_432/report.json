@@ -1,0 +1,15 @@
+{
+  "dataset_idx": 432,
+  "question": "Look at the models of molecules below. Select the elementary substance.",
+  "visual_cued": 1,
+  "pred_orig": "yes",
+  "p_orig": 0.6668805480003357,
+  "pred_blank": "yes",
+  "p_blank": 0.4912416934967041,
+  "swap_same_rate": 1.0,
+  "swap_mean_js": 0.034432342217769474,
+  "swap_mean_kl": 0.14985242672264576,
+  "kl_blank": 0.1816040426492691,
+  "js_blank": 0.04590589553117752,
+  "delta_p_blank": -0.1756388545036316
+}

@@ -1,0 +1,15 @@
+{
+  "dataset_idx": 100,
+  "question": "What is the probability that a rabbit produced by this cross will have black fur?",
+  "visual_cued": 1,
+  "pred_orig": "0",
+  "p_orig": 0.23682864010334015,
+  "pred_blank": "0",
+  "p_blank": 0.18792548775672913,
+  "swap_same_rate": 1.0,
+  "swap_mean_js": 0.011514109733980149,
+  "swap_mean_kl": 0.0474198036827147,
+  "kl_blank": 0.019354838877916336,
+  "js_blank": 0.004963413113728166,
+  "delta_p_blank": -0.04890315234661102
+}

@@ -1,0 +1,15 @@
+{
+  "dataset_idx": 1338,
+  "question": "What is the probability that an American curl cat produced by this cross will have curled ears?",
+  "visual_cued": 1,
+  "pred_orig": "0",
+  "p_orig": 0.2503974735736847,
+  "pred_blank": "0",
+  "p_blank": 0.15017519891262054,
+  "swap_same_rate": 1.0,
+  "swap_mean_js": 0.019011865806533024,
+  "swap_mean_kl": 0.08014881354756653,
+  "kl_blank": 0.07580296695232391,
+  "js_blank": 0.01943790540099144,
+  "delta_p_blank": -0.10022227466106415
+}

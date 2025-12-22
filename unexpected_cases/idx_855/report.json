@@ -1,0 +1,15 @@
+{
+  "dataset_idx": 855,
+  "question": "Which material is these crayons made of?",
+  "visual_cued": 1,
+  "pred_orig": "plastic",
+  "p_orig": 0.668866753578186,
+  "pred_blank": "plastic",
+  "p_blank": 0.4537483751773834,
+  "swap_same_rate": 1.0,
+  "swap_mean_js": 0.050634468672797084,
+  "swap_mean_kl": 0.22038189135491848,
+  "kl_blank": 0.1703559011220932,
+  "js_blank": 0.04408982954919338,
+  "delta_p_blank": -0.2151183784008026
+}

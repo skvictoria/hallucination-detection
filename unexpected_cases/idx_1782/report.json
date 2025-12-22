@@ -1,0 +1,15 @@
+{
+  "dataset_idx": 1782,
+  "question": "The United States has a federal system. Based on these definitions, which of these statements would most likely be made by a person who lives under a federal system?",
+  "visual_cued": 1,
+  "pred_orig": "yes",
+  "p_orig": 0.23170071840286255,
+  "pred_blank": "yes",
+  "p_blank": 0.23583495616912842,
+  "swap_same_rate": 1.0,
+  "swap_mean_js": 0.034256093902513385,
+  "swap_mean_kl": 0.15328714810311794,
+  "kl_blank": 0.12644977867603302,
+  "js_blank": 0.030440189875662327,
+  "delta_p_blank": 0.004134237766265869
+}

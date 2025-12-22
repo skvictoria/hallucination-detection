@@ -1,0 +1,15 @@
+{
+  "dataset_idx": 592,
+  "question": "Which material is this magnifying glass made of?",
+  "visual_cued": 1,
+  "pred_orig": "glass",
+  "p_orig": 0.638434112071991,
+  "pred_blank": "glass",
+  "p_blank": 0.661754846572876,
+  "swap_same_rate": 0.875,
+  "swap_mean_js": 0.05702891363762319,
+  "swap_mean_kl": 0.22933982126414776,
+  "kl_blank": 0.34285077452659607,
+  "js_blank": 0.06751169078052044,
+  "delta_p_blank": 0.02332073450088501
+}

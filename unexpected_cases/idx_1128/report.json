@@ -1,0 +1,15 @@
+{
+  "dataset_idx": 1128,
+  "question": "What is the probability that a cucumber plant produced by this cross will be homozygous dominant for the fruit sheen gene?",
+  "visual_cued": 1,
+  "pred_orig": "unknown",
+  "p_orig": 0.08557362109422684,
+  "pred_blank": "unknown",
+  "p_blank": 0.08868058770895004,
+  "swap_same_rate": 0.875,
+  "swap_mean_js": 0.01040622750588227,
+  "swap_mean_kl": 0.04092117527034134,
+  "kl_blank": 0.01975071430206299,
+  "js_blank": 0.0050775280687958,
+  "delta_p_blank": 0.0031069666147232056
+}

@@ -1,0 +1,15 @@
+{
+  "dataset_idx": 170,
+  "question": "What evidence of a wildfire does this picture show?",
+  "visual_cued": 1,
+  "pred_orig": "fire",
+  "p_orig": 0.8818656206130981,
+  "pred_blank": "fire",
+  "p_blank": 0.9734911322593689,
+  "swap_same_rate": 1.0,
+  "swap_mean_js": 0.009880679921479896,
+  "swap_mean_kl": 0.051236354280263186,
+  "kl_blank": 0.11600808799266815,
+  "js_blank": 0.0191514790058136,
+  "delta_p_blank": 0.09162551164627075
+}

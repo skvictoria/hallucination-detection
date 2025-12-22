@@ -1,0 +1,15 @@
+{
+  "dataset_idx": 504,
+  "question": "Which of these oceans does the prime meridian intersect?",
+  "visual_cued": 1,
+  "pred_orig": "pacific",
+  "p_orig": 0.3533288538455963,
+  "pred_blank": "pacific",
+  "p_blank": 0.7849954962730408,
+  "swap_same_rate": 1.0,
+  "swap_mean_js": 0.0634350492618978,
+  "swap_mean_kl": 0.2883442286401987,
+  "kl_blank": 0.5475070476531982,
+  "js_blank": 0.11415049806237221,
+  "delta_p_blank": 0.43166664242744446
+}

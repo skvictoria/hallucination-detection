@@ -1,0 +1,15 @@
+{
+  "dataset_idx": 207,
+  "question": "What is the probability that a cow produced by this cross will be homozygous dominant for the coat pattern gene?",
+  "visual_cued": 1,
+  "pred_orig": "unknown",
+  "p_orig": 0.08529301732778549,
+  "pred_blank": "unknown",
+  "p_blank": 0.10342656075954437,
+  "swap_same_rate": 0.875,
+  "swap_mean_js": 0.012500360724516213,
+  "swap_mean_kl": 0.04941305657848716,
+  "kl_blank": 0.07428682595491409,
+  "js_blank": 0.01856821309775114,
+  "delta_p_blank": 0.01813354343175888
+}

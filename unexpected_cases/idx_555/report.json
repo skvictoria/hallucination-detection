@@ -1,0 +1,15 @@
+{
+  "dataset_idx": 555,
+  "question": "In this food web, which organism contains matter that eventually moves to the parasol fungus?",
+  "visual_cued": 1,
+  "pred_orig": "fish",
+  "p_orig": 0.3071047067642212,
+  "pred_blank": "fish",
+  "p_blank": 0.24227413535118103,
+  "swap_same_rate": 0.875,
+  "swap_mean_js": 0.06142771407030523,
+  "swap_mean_kl": 0.25505964644253254,
+  "kl_blank": 0.14795228838920593,
+  "js_blank": 0.035294778645038605,
+  "delta_p_blank": -0.06483057141304016
+}

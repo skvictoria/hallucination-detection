@@ -1,0 +1,15 @@
+{
+  "dataset_idx": 812,
+  "question": "Will these magnets attract or repel each other?",
+  "visual_cued": 1,
+  "pred_orig": "yes",
+  "p_orig": 0.38505715131759644,
+  "pred_blank": "yes",
+  "p_blank": 0.411725252866745,
+  "swap_same_rate": 1.0,
+  "swap_mean_js": 0.024054982990492135,
+  "swap_mean_kl": 0.10461651487275958,
+  "kl_blank": 0.04431561380624771,
+  "js_blank": 0.009889510925859213,
+  "delta_p_blank": 0.02666810154914856
+}

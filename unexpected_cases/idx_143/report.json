@@ -1,0 +1,15 @@
+{
+  "dataset_idx": 143,
+  "question": "Does this passage describe the weather or the climate?",
+  "visual_cued": 1,
+  "pred_orig": "cold",
+  "p_orig": 0.3870912790298462,
+  "pred_blank": "cold",
+  "p_blank": 0.37607985734939575,
+  "swap_same_rate": 1.0,
+  "swap_mean_js": 0.0634271411690861,
+  "swap_mean_kl": 0.27699577808380127,
+  "kl_blank": 0.23850294947624207,
+  "js_blank": 0.055177101865410805,
+  "delta_p_blank": -0.01101142168045044
+}

@@ -1,0 +1,15 @@
+{
+  "dataset_idx": 743,
+  "question": "Complete the text to describe the diagram.\nSolute particles moved in both directions across the permeable membrane. But more solute particles moved across the membrane (). When there was an equal concentration on both sides, the particles reached equilibrium.",
+  "visual_cued": 1,
+  "pred_orig": "yes",
+  "p_orig": 0.8772305250167847,
+  "pred_blank": "yes",
+  "p_blank": 0.8555546998977661,
+  "swap_same_rate": 1.0,
+  "swap_mean_js": 0.006235126464162022,
+  "swap_mean_kl": 0.02334646787494421,
+  "kl_blank": 0.002357963239774108,
+  "js_blank": 0.0006045387999620289,
+  "delta_p_blank": -0.021675825119018555
+}

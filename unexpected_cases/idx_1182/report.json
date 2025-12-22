@@ -1,0 +1,15 @@
+{
+  "dataset_idx": 1182,
+  "question": "What is the probability that a rat produced by this cross will have a dwarf body?",
+  "visual_cued": 1,
+  "pred_orig": "0",
+  "p_orig": 0.13702717423439026,
+  "pred_blank": "0",
+  "p_blank": 0.15738409757614136,
+  "swap_same_rate": 0.875,
+  "swap_mean_js": 0.00831731193466112,
+  "swap_mean_kl": 0.03294155024923384,
+  "kl_blank": 0.04690178856253624,
+  "js_blank": 0.0113845095038414,
+  "delta_p_blank": 0.0203569233417511
+}

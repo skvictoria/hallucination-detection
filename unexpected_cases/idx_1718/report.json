@@ -1,0 +1,15 @@
+{
+  "dataset_idx": 1718,
+  "question": "Which of these states is farthest north?",
+  "visual_cued": 1,
+  "pred_orig": "unknown",
+  "p_orig": 0.1160491481423378,
+  "pred_blank": "unknown",
+  "p_blank": 0.08375335484743118,
+  "swap_same_rate": 0.875,
+  "swap_mean_js": 0.08785907470155507,
+  "swap_mean_kl": 0.3933008210733533,
+  "kl_blank": 0.3872543275356293,
+  "js_blank": 0.09697269275784492,
+  "delta_p_blank": -0.032295793294906616
+}

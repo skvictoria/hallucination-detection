@@ -1,0 +1,15 @@
+{
+  "dataset_idx": 576,
+  "question": "Which of the following was an independent variable in this experiment?",
+  "visual_cued": 1,
+  "pred_orig": "right",
+  "p_orig": 0.3892323076725006,
+  "pred_blank": "right",
+  "p_blank": 0.3113727569580078,
+  "swap_same_rate": 0.875,
+  "swap_mean_js": 0.09986283036414534,
+  "swap_mean_kl": 0.39147363044321537,
+  "kl_blank": 0.14521613717079163,
+  "js_blank": 0.03628970496356487,
+  "delta_p_blank": -0.0778595507144928
+}

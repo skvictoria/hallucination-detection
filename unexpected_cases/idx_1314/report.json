@@ -1,0 +1,15 @@
+{
+  "dataset_idx": 1314,
+  "question": "In this food chain, the deer mouse is a secondary consumer. Why?",
+  "visual_cued": 1,
+  "pred_orig": "yes",
+  "p_orig": 0.3472535312175751,
+  "pred_blank": "yes",
+  "p_blank": 0.24632500112056732,
+  "swap_same_rate": 0.875,
+  "swap_mean_js": 0.053995595895685256,
+  "swap_mean_kl": 0.2444439521059394,
+  "kl_blank": 0.2042727917432785,
+  "js_blank": 0.04388539120554924,
+  "delta_p_blank": -0.10092853009700775
+}

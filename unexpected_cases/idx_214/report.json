@@ -1,0 +1,15 @@
+{
+  "dataset_idx": 214,
+  "question": "Which air temperature was measured within the outlined area shown?",
+  "visual_cued": 1,
+  "pred_orig": "90",
+  "p_orig": 0.16134525835514069,
+  "pred_blank": "90",
+  "p_blank": 0.16424238681793213,
+  "swap_same_rate": 0.875,
+  "swap_mean_js": 0.04960743396077305,
+  "swap_mean_kl": 0.19802582450211048,
+  "kl_blank": 0.09436416625976562,
+  "js_blank": 0.024275164119899273,
+  "delta_p_blank": 0.002897128462791443
+}
