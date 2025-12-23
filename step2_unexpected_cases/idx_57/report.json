@@ -1,0 +1,16 @@
+{
+  "dataset_idx": 57,
+  "visual_cued": 1,
+  "question": "Which of these continents does the equator intersect?",
+  "ans_orig": "south america",
+  "ans_blank": "south america",
+  "swap_same_rate": 1.0,
+  "MDI_orig": 147.26630793544956,
+  "AEI_T_orig": 14.331895415851921,
+  "AT_orig": 0.908851904419878,
+  "AO_orig": 0.09114809558012206,
+  "effrank_text_orig": 23.74816499868014,
+  "effrank_img_orig": 45.0215732682574,
+  "cka_tv_orig": 0.4072261452674866,
+  "mi_nce_orig": 0.0018761305399808137
+}

@@ -1,0 +1,16 @@
+{
+  "dataset_idx": 66,
+  "visual_cued": 1,
+  "question": "Does this passage describe the weather or the climate?",
+  "ans_orig": "weather",
+  "ans_blank": "weather",
+  "swap_same_rate": 1.0,
+  "MDI_orig": 194.25631484933552,
+  "AEI_T_orig": 15.338361794766694,
+  "AT_orig": 0.9258065031098983,
+  "AO_orig": 0.07419349689010173,
+  "effrank_text_orig": 22.930835396774587,
+  "effrank_img_orig": 33.70932758198332,
+  "cka_tv_orig": 0.2917000949382782,
+  "mi_nce_orig": 0.026119485337344095
+}

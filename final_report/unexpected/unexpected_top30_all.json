@@ -1,0 +1,44 @@
+[
+  {
+    "score": 254.56482091199527,
+    "dataset_idx": 71,
+    "visual_cued": 1,
+    "question": "Which property do these three objects have in common?",
+    "ans_orig": "a",
+    "ans_blank": "a",
+    "swap_same_rate": 1.0,
+    "same_orig_blank": 1,
+    "mdi_orig": 249.73874152293715,
+    "aei_t_orig": 9.652158778116258,
+    "effrank_image_orig": 7.83931650028006,
+    "cka_ti_orig": 0.2045317143201828
+  },
+  {
+    "score": 214.00797723557596,
+    "dataset_idx": 68,
+    "visual_cued": 1,
+    "question": "Which property do these three objects have in common?",
+    "ans_orig": "a",
+    "ans_blank": "a",
+    "swap_same_rate": 1.0,
+    "same_orig_blank": 1,
+    "mdi_orig": 209.27751235663897,
+    "aei_t_orig": 9.46092975787401,
+    "effrank_image_orig": 8.34597943966512,
+    "cka_ti_orig": 0.20485568046569824
+  },
+  {
+    "score": 167.2390268236927,
+    "dataset_idx": 51,
+    "visual_cued": 1,
+    "question": "During this time, thermal energy was transferred from () to ().",
+    "ans_orig": "a",
+    "ans_blank": "a",
+    "swap_same_rate": 1.0,
+    "same_orig_blank": 1,
+    "mdi_orig": 163.22817434310193,
+    "aei_t_orig": 8.02170496118155,
+    "effrank_image_orig": 8.048891130534908,
+    "cka_ti_orig": 0.14738306403160095
+  }
+]

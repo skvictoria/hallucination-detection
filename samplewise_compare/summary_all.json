@@ -1,0 +1,64 @@
+{
+  "baseline_root": "/storage/ice1/7/2/skim3513/hallucination-detection/step3_baseline",
+  "reg_root": "/storage/ice1/7/2/skim3513/hallucination-detection/step3_rankreg_w0p2_t32_r64",
+  "th_swap": 0.85,
+  "require_same_blank": true,
+  "th_mdi": 3.0,
+  "only_visual": true,
+  "placements": [
+    "llm_attn",
+    "llm_mlp",
+    "projector",
+    "all"
+  ],
+  "per_placement": {
+    "llm_attn": {
+      "base_csv": "/storage/ice1/7/2/skim3513/hallucination-detection/step3_baseline/llm_attn/final/eval_llm_attn.csv",
+      "reg_csv": "/storage/ice1/7/2/skim3513/hallucination-detection/step3_rankreg_w0p2_t32_r64/llm_attn/final/eval_llm_attn.csv",
+      "merged_rows": 95,
+      "confusion": {
+        "keep": 21,
+        "fixed": 0,
+        "new": 0,
+        "none": 74,
+        "total": 95
+      }
+    },
+    "llm_mlp": {
+      "base_csv": "/storage/ice1/7/2/skim3513/hallucination-detection/step3_baseline/llm_mlp/final/eval_llm_mlp.csv",
+      "reg_csv": "/storage/ice1/7/2/skim3513/hallucination-detection/step3_rankreg_w0p2_t32_r64/llm_mlp/final/eval_llm_mlp.csv",
+      "merged_rows": 95,
+      "confusion": {
+        "keep": 20,
+        "fixed": 0,
+        "new": 0,
+        "none": 75,
+        "total": 95
+      }
+    },
+    "projector": {
+      "base_csv": "/storage/ice1/7/2/skim3513/hallucination-detection/step3_baseline/projector/final/eval_projector.csv",
+      "reg_csv": "/storage/ice1/7/2/skim3513/hallucination-detection/step3_rankreg_w0p2_t32_r64/projector/final/eval_projector.csv",
+      "merged_rows": 95,
+      "confusion": {
+        "keep": 13,
+        "fixed": 0,
+        "new": 0,
+        "none": 82,
+        "total": 95
+      }
+    },
+    "all": {
+      "base_csv": "/storage/ice1/7/2/skim3513/hallucination-detection/step3_baseline/all/final/eval_all.csv",
+      "reg_csv": "/storage/ice1/7/2/skim3513/hallucination-detection/step3_rankreg_w0p2_t32_r64/all/final/eval_all.csv",
+      "merged_rows": 95,
+      "confusion": {
+        "keep": 21,
+        "fixed": 0,
+        "new": 0,
+        "none": 74,
+        "total": 95
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "dataset_idx": 24,
+  "visual_cued": 1,
+  "question": "Which property do these two objects have in common?",
+  "ans_orig": "color",
+  "ans_blank": "color",
+  "swap_same_rate": 1.0,
+  "MDI_orig": 204.15681041775434,
+  "AEI_T_orig": 15.041144870856684,
+  "AT_orig": 0.9308851874471563,
+  "AO_orig": 0.06911481255284364,
+  "num_text_tokens": 38,
+  "num_image_tokens": 576
+}

@@ -1,0 +1,16 @@
+{
+  "dataset_idx": 240,
+  "visual_cued": 1,
+  "question": "Which animal's neck is also adapted for reaching high branches?",
+  "ans_orig": "giraffe",
+  "ans_blank": "giraffe",
+  "swap_same_rate": 1.0,
+  "MDI_orig": 154.75820330128514,
+  "AEI_T_orig": 13.796361844116062,
+  "AT_orig": 0.916776070678701,
+  "AO_orig": 0.0832239293212989,
+  "effrank_text_orig": 24.473795832036572,
+  "effrank_img_orig": 40.933034540567405,
+  "cka_tv_orig": 0.28385379910469055,
+  "mi_nce_orig": -0.025801643889340475
+}

@@ -1,0 +1,30 @@
+[
+  {
+    "score": 190.61690448842938,
+    "dataset_idx": 8,
+    "visual_cued": 1,
+    "question": "Which of these states is farthest north?",
+    "ans_orig": "d",
+    "ans_blank": "d",
+    "swap_same_rate": 1.0,
+    "same_orig_blank": 1,
+    "mdi_orig": 186.03035508833867,
+    "aei_t_orig": 9.173098800181446,
+    "effrank_image_orig": 8.837109526109565,
+    "cka_ti_orig": 0.17231832444667816
+  },
+  {
+    "score": 163.19008294350985,
+    "dataset_idx": 51,
+    "visual_cued": 1,
+    "question": "During this time, thermal energy was transferred from () to ().",
+    "ans_orig": "b",
+    "ans_blank": "b",
+    "swap_same_rate": 1.0,
+    "same_orig_blank": 1,
+    "mdi_orig": 159.18363647946862,
+    "aei_t_orig": 8.01289292808245,
+    "effrank_image_orig": 8.09537071218926,
+    "cka_ti_orig": 0.1590682864189148
+  }
+]

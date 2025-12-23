@@ -1,0 +1,16 @@
+{
+  "dataset_idx": 54,
+  "visual_cued": 1,
+  "question": "Which property do these three objects have in common?",
+  "ans_orig": "color",
+  "ans_blank": "color",
+  "swap_same_rate": 1.0,
+  "MDI_orig": 188.41829997926223,
+  "AEI_T_orig": 14.954808747679284,
+  "AT_orig": 0.9255419094654931,
+  "AO_orig": 0.07445809053450692,
+  "effrank_text_orig": 22.620583016818433,
+  "effrank_img_orig": 29.190621745524165,
+  "cka_tv_orig": 0.26054754853248596,
+  "mi_nce_orig": -0.025286182921322897
+}

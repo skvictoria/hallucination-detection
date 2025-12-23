@@ -1,0 +1,4 @@
+aei_t_orig,ans_blank,ans_orig,cka_ti_orig,dataset_idx,effrank_image_orig,mdi_orig,question,same_orig_blank,score,swap_same_rate,visual_cued
+9.652158778116258,a,a,0.2045317143201828,71,7.83931650028006,249.73874152293715,Which property do these three objects have in common?,1,254.56482091199527,1.0,1
+9.46092975787401,a,a,0.20485568046569824,68,8.34597943966512,209.27751235663897,Which property do these three objects have in common?,1,214.00797723557596,1.0,1
+8.02170496118155,a,a,0.14738306403160095,51,8.048891130534908,163.22817434310193,"During this time, thermal energy was transferred from () to ().",1,167.2390268236927,1.0,1

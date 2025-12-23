@@ -1,0 +1,16 @@
+{
+  "dataset_idx": 164,
+  "visual_cued": 1,
+  "question": "Which animal's feet are also adapted for swimming?",
+  "ans_orig": "duck",
+  "ans_blank": "duck",
+  "swap_same_rate": 1.0,
+  "MDI_orig": 183.41110943633933,
+  "AEI_T_orig": 14.278930507836984,
+  "AT_orig": 0.9272032797296742,
+  "AO_orig": 0.07279672027032581,
+  "effrank_text_orig": 23.910292512038467,
+  "effrank_img_orig": 39.01525905596898,
+  "cka_tv_orig": 0.3072398900985718,
+  "mi_nce_orig": -0.01731537298479946
+}

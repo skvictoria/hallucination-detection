@@ -1,0 +1,16 @@
+{
+  "dataset_idx": 90,
+  "visual_cued": 1,
+  "question": "Which of these states is farthest west?",
+  "ans_orig": "california",
+  "ans_blank": "california",
+  "swap_same_rate": 1.0,
+  "MDI_orig": 207.93092438557537,
+  "AEI_T_orig": 15.060037531117999,
+  "AT_orig": 0.9320544400366189,
+  "AO_orig": 0.06794555996338114,
+  "effrank_text_orig": 22.71351970815194,
+  "effrank_img_orig": 41.84797295315085,
+  "cka_tv_orig": 0.2951960861682892,
+  "mi_nce_orig": -0.018695578139218405
+}

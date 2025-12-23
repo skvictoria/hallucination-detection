@@ -1,0 +1,14 @@
+{
+  "dataset_idx": 17,
+  "visual_cued": 1,
+  "question": "Which of these states is farthest north?",
+  "ans_orig": "alaska",
+  "ans_blank": "alaska",
+  "swap_same_rate": 1.0,
+  "MDI_orig": 151.055180694847,
+  "AEI_T_orig": 14.684366454221008,
+  "AT_orig": 0.9088044385348507,
+  "AO_orig": 0.09119556146514933,
+  "num_text_tokens": 38,
+  "num_image_tokens": 576
+}

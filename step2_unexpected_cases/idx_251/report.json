@@ -1,0 +1,16 @@
+{
+  "dataset_idx": 251,
+  "visual_cued": 1,
+  "question": "Which animal's limbs are also adapted for climbing trees?",
+  "ans_orig": "monkey",
+  "ans_blank": "monkey",
+  "swap_same_rate": 1.0,
+  "MDI_orig": 171.16573209984008,
+  "AEI_T_orig": 13.622789073636167,
+  "AT_orig": 0.925820616654885,
+  "AO_orig": 0.07417938334511492,
+  "effrank_text_orig": 25.012784006881738,
+  "effrank_img_orig": 42.79405344196485,
+  "cka_tv_orig": 0.36964309215545654,
+  "mi_nce_orig": 0.01905705018719761
+}
