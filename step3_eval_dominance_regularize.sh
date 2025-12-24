@@ -1,5 +1,6 @@
 BASE=/storage/ice1/7/2/skim3513/hallucination-detection
-REG=$BASE/step3_rankreg_w0p2_t32_r64
+#REG=$BASE/step3_rankreg_w0p2_t32_r64
+REG=$BASE/step3_rtf_er0p2_q64_ts256
 MODEL=llava-hf/llava-1.5-7b-hf
 
 for P in llm_attn llm_mlp projector all; do
