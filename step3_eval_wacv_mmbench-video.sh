@@ -4,13 +4,22 @@ export HUGGINGFACE_HUB_CACHE="/home/hice1/skim3513/scratch/hallucination-detecti
 export HF_DATASETS_CACHE="/home/hice1/skim3513/scratch/hallucination-detection/hf_datasets"
 export TRANSFORMERS_CACHE="/home/hice1/skim3513/scratch/hallucination-detection/hf_transformers"
 
+
 python3 step3_eval_wacv_mmbench-video.py \
-  --base_dir /home/hice1/skim3513/scratch/hallucination-detection \
-  --model_name Qwen/Qwen2.5-VL-7B-Instruct \
-  --ckpt_dir /home/hice1/skim3513/scratch/hallucination-detection/qwen25vl_mmbench_video/llm_attn/final \
-  --split test \
-  --max_eval_samples 400 \
-  --videos_dir /home/hice1/skim3513/scratch/hallucination-detection/mmbench_video_assets \
-  --num_frames 4 \
-  --save_mismatch_jsonl \
-  --device cuda:0
+  --adapter_dir /home/hice1/skim3513/scratch/hallucination-detection/qwen25vl_mmbench_video/llm_attn/final \
+  --max_eval_samples 200 \
+  --nframes 4 \
+  --video_max_pixels $((128*28*28)) \
+  --max_length 8192 \
+  --max_new_tokens 64 \
+  --force_video_reader decord
+
+
+# python3 step3_eval_wacv_mmbench-video.py \
+#   --ckpt_dir /home/hice1/skim3513/scratch/hallucination-detection/qwen25vl_mmbench_video/llm_attn/checkpoint_step_1000 \
+#   --videos_dir /home/hice1/skim3513/scratch/hallucination-detection/mmbench_video_assets \
+#   --use_cache \
+#   --fps 1 \
+#   --num_frames 4 \
+#   --max_new_tokens 64
+

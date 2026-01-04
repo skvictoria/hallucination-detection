@@ -673,6 +673,107 @@ def build_mmbench_video_cache(
         gc.collect()
         torch.cuda.empty_cache()
 
+def _slice_seq_aligned_tensors(batch: Dict[str, torch.Tensor], new_L: int) -> Dict[str, torch.Tensor]:
+    """
+    input_ids처럼 [B, L] 형태의 시퀀스 정렬 텐서는 L 차원을 new_L로 잘라서 반환.
+    그 외(video_grid_thw, pixel_values_videos 등)는 그대로 둠.
+    """
+    out = {}
+    for k, v in batch.items():
+        if not isinstance(v, torch.Tensor):
+            continue
+        if v.dim() >= 2 and v.shape[0] == 1:
+            # [1, L] 또는 [1, L, ...] 인데 L이 seq_len인 경우만 자름
+            if k in ["input_ids", "attention_mask", "position_ids", "token_type_ids"]:
+                out[k] = v[:, :new_L]
+            else:
+                out[k] = v
+        else:
+            out[k] = v
+    return out
+
+
+@torch.no_grad()
+def preview_generation(
+    model,
+    processor,
+    batch: Dict[str, torch.Tensor],
+    step_str: str,
+    max_new_tokens: int = 64,
+    prompt_chars: int = 400,
+):
+    """
+    batch(캐시/온라인 모두 가능)에서 prompt_len을 labels로 복원하고,
+    prompt까지만 잘라 generate해서 GT/PRED를 출력.
+    """
+    # labels가 없으면 preview 불가 (온라인 데이터에서 labels 만들지 않는 경우 등)
+    if "labels" not in batch or "input_ids" not in batch:
+        print(f"[PREVIEW {step_str}] skip: batch has no labels/input_ids")
+        return
+
+    input_ids = batch["input_ids"]
+    labels = batch["labels"]
+
+    # prompt_len 복원: labels==-100인 prefix 길이
+    # labels shape: [1, L]
+    prompt_len = int((labels[0] == -100).sum().item())
+    L = int(input_ids.shape[1])
+    if prompt_len <= 0 or prompt_len >= L:
+        print(f"[PREVIEW {step_str}] skip: bad prompt_len={prompt_len}, L={L}")
+        return
+
+    # GT answer 디코딩 (prompt 이후)
+    gt_ids = input_ids[0, prompt_len:]
+    gt_text = processor.tokenizer.decode(gt_ids, skip_special_tokens=True).strip()
+
+    # prompt 디코딩 (끝부분만)
+    prompt_ids = input_ids[0, :prompt_len]
+    prompt_text = processor.tokenizer.decode(prompt_ids, skip_special_tokens=True)
+    prompt_tail = prompt_text[-prompt_chars:] if len(prompt_text) > prompt_chars else prompt_text
+
+    # generate는 prompt까지만 넣기
+    gen_batch = _slice_seq_aligned_tensors(batch, prompt_len)
+
+    # generate가 training config(use_cache=False)에서 느릴 수 있어서 잠깐만 True로
+    old_cache = getattr(model.config, "use_cache", None)
+    model.config.use_cache = True
+    was_training = model.training
+    model.eval()
+
+    try:
+        with torch.cuda.amp.autocast(enabled=torch.cuda.is_available(), dtype=torch.float16):
+            out_ids = model.generate(
+                **{k: v for k, v in gen_batch.items() if k != "labels"},
+                max_new_tokens=max_new_tokens,
+                do_sample=False,
+            )
+
+        # 어떤 경우는 prompt 포함, 어떤 경우는 new tokens only일 수 있어 방어
+        if out_ids.shape[1] > prompt_len:
+            gen_part = out_ids[0, prompt_len:]
+        else:
+            gen_part = out_ids[0]
+
+        pred_text = processor.tokenizer.decode(gen_part, skip_special_tokens=True).strip()
+
+        print("\n" + "=" * 80)
+        print(f"[PREVIEW {step_str}] prompt_len={prompt_len} full_L={L} gen_len={int(gen_part.numel())}")
+        print("- PROMPT (tail) ----------------------------------------")
+        print(prompt_tail)
+        print("- GT ---------------------------------------------------")
+        print(gt_text)
+        print("- PRED -------------------------------------------------")
+        print(pred_text)
+        print("=" * 80 + "\n")
+
+    except Exception as e:
+        print(f"[PREVIEW {step_str}] generate error: {repr(e)}")
+    finally:
+        if was_training:
+            model.train()
+        if old_cache is not None:
+            model.config.use_cache = old_cache
+
 
 # -------------------------
 # Training
@@ -728,6 +829,10 @@ def main():
     ap.add_argument("--num_frames", type=int, default=4)   # 8~16 추천
     ap.add_argument("--video_backend", type=str, default="decord")  # "decord" 등(설치돼 있으면)
 
+    ap.add_argument("--preview_every", type=int, default=10, help="optimizer step 기준 preview 주기 (grad_accum마다 1 step)")
+    ap.add_argument("--preview_max_new_tokens", type=int, default=64)
+    ap.add_argument("--preview_chars", type=int, default=400, help="prompt 출력 길이(끝에서부터)")
+
 
     ap.add_argument("--dry_run", action="store_true", help="LoRA target 확인만 하고 종료")
     args = ap.parse_args()
@@ -744,11 +849,11 @@ def main():
     base_dir = Path(args.base_dir).resolve()
     paths = setup_hf_cache(base_dir)
 
-    out_dir = Path(args.output_dir).resolve() if args.output_dir else (base_dir / "qwen25vl_mmbench_video/baseline" / args.placement)
+    out_dir = Path(args.output_dir).resolve() if args.output_dir else (base_dir / "qwen25vl_mmbench_video" / args.placement)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     min_pixels = 128 * 28 * 28
-    max_pixels = 128 * 28 * 28
+    max_pixels = 256 * 28 * 28
     processor = AutoProcessor.from_pretrained(
         args.model_name,
         cache_dir=str(paths["HF_TRANSFORMERS_CACHE"]),
@@ -914,6 +1019,7 @@ def main():
 
     scheduler = torch.optim.lr_scheduler.LambdaLR(optim, lr_lambda)
     model.train()
+    update_step = 0
     step = 0
     optim.zero_grad(set_to_none=True)
     running_loss = 0.0
@@ -936,6 +1042,20 @@ def main():
                 optim.step()
                 scheduler.step()
                 optim.zero_grad(set_to_none=True)
+
+                update_step += 1
+
+                # 주기적으로 preview 출력 (optimizer step 기준)
+                if (args.preview_every > 0) and (update_step % args.preview_every == 0):
+                    # 현재 batch 기준으로 preview (batch는 이미 device로 올라와 있음)
+                    preview_generation(
+                        model=model,
+                        processor=processor,
+                        batch=batch,
+                        step_str=f"update={update_step} micro={step+1}",
+                        max_new_tokens=args.preview_max_new_tokens,
+                        prompt_chars=args.preview_chars,
+                    )
 
             if (step + 1) % args.log_every == 0:
                 lr = scheduler.get_last_lr()[0]
