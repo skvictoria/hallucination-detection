@@ -8,7 +8,7 @@ import inspect
 import zipfile
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
-
+import gc
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
@@ -529,13 +529,6 @@ class MMBenchVideoLoRADataset(Dataset):
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
 
-        # truncate
-        # if input_ids.shape[1] > self.max_length:
-        #     input_ids = input_ids[:, : self.max_length]
-        #     attention_mask = attention_mask[:, : self.max_length]
-        #     if prompt_len > self.max_length:
-        #         prompt_len = self.max_length
-
         labels = input_ids.clone()
         labels[:, :prompt_len] = -100
 
@@ -672,8 +665,13 @@ def build_mmbench_video_cache(
 
         torch.save(payload, cache_dir / f"{idx:06d}.pt")
 
-        if idx % 50 == 0:
-            print(f"[CACHE] saved {idx:06d}.pt")
+        print(f"[CACHE] saved {idx:06d}.pt")
+        for var_name in ['inputs', 'enc', 'video_tensor', 'pixel_values']:
+                if var_name in locals():
+                    del locals()[var_name]
+        
+        gc.collect()
+        torch.cuda.empty_cache()
 
 
 # -------------------------
@@ -746,7 +744,7 @@ def main():
     base_dir = Path(args.base_dir).resolve()
     paths = setup_hf_cache(base_dir)
 
-    out_dir = Path(args.output_dir).resolve() if args.output_dir else (base_dir / "qwen25vl_mmbench_video" / args.placement)
+    out_dir = Path(args.output_dir).resolve() if args.output_dir else (base_dir / "qwen25vl_mmbench_video/baseline" / args.placement)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     min_pixels = 128 * 28 * 28
@@ -789,6 +787,7 @@ def main():
 
     # Optional RTF
     if not args.rtf_disable:
+        print("rtf is not disable!")
         inject_rtf_into_qwen(
             model=model,
             tokenizer=tokenizer,
@@ -919,21 +918,10 @@ def main():
     optim.zero_grad(set_to_none=True)
     running_loss = 0.0
 
-    # after train_set created
-    for i in range(5):
-        try:
-            sample = train_set[i]
-            print("OK idx", i, "keys=", list(sample.keys()))
-        except Exception as e:
-            print("FAIL idx", i, "error=", repr(e))
-            raise
 
     while step < args.max_steps:
         for batch in train_loader:
-            # move to device
-            print("before batch")
             batch = {k: (v.to(args.device) if isinstance(v, torch.Tensor) else v) for k, v in batch.items()}
-            print("after batch")
             out = model(**batch)
             loss_task = out.loss
             if not torch.isfinite(loss_task):

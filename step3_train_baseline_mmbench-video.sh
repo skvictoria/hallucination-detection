@@ -30,7 +30,8 @@ export TRANSFORMERS_CACHE="/home/hice1/skim3513/scratch/hallucination-detection/
 #   --batch_size 1 \
 #   --max_length 4096 \
 #   --device cuda:0 \
-#   --device_map cuda:0
+#   --device_map cuda:0 \
+#   --rtf_disable
 
 python3 step3_train_wacv_mmbench-video.py \
   --placement llm_attn \
@@ -40,5 +41,5 @@ python3 step3_train_wacv_mmbench-video.py \
   --grad_accum 8 \
   --batch_size 1 \
   --device cuda:0 \
-  --device_map cuda:0
-
+  --device_map cuda:0 \
+  --rtf_disable
