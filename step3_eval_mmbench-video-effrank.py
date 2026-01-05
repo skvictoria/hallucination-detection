@@ -1,4 +1,4 @@
-# eval_qwen25vl_mmbench_video_lora.py
+# eval_qwen25vl_mmbench_video_lora_with_stats.py
 import os
 import json
 import math
@@ -66,6 +66,35 @@ def setup_hf_cache(base_dir: Path) -> Dict[str, Path]:
         "HF_DATASETS_CACHE": hf_datasets,
         "HF_TRANSFORMERS_CACHE": hf_transformers,
     }
+
+def downsample_tokens_meanpool(x_2d: torch.Tensor, target_n: int) -> torch.Tensor:
+    """
+    x_2d: [N, D] -> [target_n, D] by mean-pooling over contiguous chunks.
+    """
+    assert x_2d.dim() == 2
+    N, D = x_2d.shape
+    target_n = int(target_n)
+    if target_n <= 0:
+        return x_2d[:0]
+    if N <= target_n:
+        return x_2d
+
+    # chunk boundaries (approximately equal-sized)
+    # indices in [0, N]
+    bounds = torch.linspace(0, N, steps=target_n + 1, device=x_2d.device)
+    bounds = bounds.floor().long().clamp(0, N)
+
+    out = []
+    for i in range(target_n):
+        s = int(bounds[i].item())
+        e = int(bounds[i + 1].item())
+        if e <= s:
+            # if empty chunk occurs due to flooring, take one element safely
+            s = min(s, N - 1)
+            e = min(s + 1, N)
+        out.append(x_2d[s:e].mean(dim=0, keepdim=True))  # [1, D]
+    return torch.cat(out, dim=0)  # [target_n, D]
+
 
 
 # -------------------------
@@ -231,7 +260,6 @@ def build_mmbench_video_eval_cache(
             print(f"[SKIP] missing video idx={idx}: {video_path}")
             continue
 
-        # conversation (same format as training)
         user_conv = [{
             "role": "user",
             "content": [
@@ -244,7 +272,6 @@ def build_mmbench_video_eval_cache(
             "content": [{"type": "text", "text": a}],
         }]
 
-        # tokenize=True (video included) — videos_kwargs만 사용 (중복 kwarg 방지)
         enc = processor.apply_chat_template(
             full_conv,
             add_generation_prompt=False,
@@ -258,7 +285,6 @@ def build_mmbench_video_eval_cache(
             },
         )
 
-        # fp16 to reduce cache size
         if "pixel_values_videos" in enc and isinstance(enc["pixel_values_videos"], torch.Tensor):
             enc["pixel_values_videos"] = enc["pixel_values_videos"].to(torch.float16)
 
@@ -302,7 +328,6 @@ def build_mmbench_video_eval_cache(
         if (idx + 1) % 50 == 0:
             print(f"[CACHE] saved up to idx={idx}")
 
-        # cleanup
         del enc
         gc.collect()
         torch.cuda.empty_cache()
@@ -317,11 +342,8 @@ _ARTICLES = {"a", "an", "the"}
 
 def _normalize_text(s: str) -> str:
     s = s.lower().strip()
-    # remove punctuation
     s = "".join(ch for ch in s if ch not in set(string.punctuation))
-    # remove articles
     tokens = [t for t in s.split() if t not in _ARTICLES]
-    # normalize whitespace
     return " ".join(tokens)
 
 def exact_match(pred: str, gt: str) -> float:
@@ -353,7 +375,6 @@ def f1_score(pred: str, gt: str) -> float:
 # decode GT from full input_ids using prompt_len (+ optional <|im_end|>)
 # -------------------------
 def decode_gt_from_full_ids(input_ids_1d: torch.Tensor, prompt_len: int, tokenizer) -> str:
-    # from prompt_len to <|im_end|> (if exists)
     ans_ids = input_ids_1d[prompt_len:]
     im_end_id = tokenizer.convert_tokens_to_ids("<|im_end|>")
     if isinstance(im_end_id, int) and im_end_id >= 0:
@@ -361,6 +382,406 @@ def decode_gt_from_full_ids(input_ids_1d: torch.Tensor, prompt_len: int, tokeniz
         if end_pos.numel() > 0:
             ans_ids = ans_ids[: int(end_pos[0].item())]
     return tokenizer.decode(ans_ids, skip_special_tokens=True).strip()
+
+
+# =====================================================================
+# NEW: modality masks + effective rank + MDI/AEI
+# =====================================================================
+
+def _guess_video_placeholder_id(tokenizer, input_ids_1d: torch.Tensor) -> Optional[int]:
+    """
+    Qwen2.5-VL 계열에서 비디오 placeholder 토큰 id를 유추.
+    환경/버전에 따라 token string이 다를 수 있어 후보를 여러 개 두고,
+    실제 input_ids에서 가장 많이 등장하는 후보를 선택.
+    """
+    candidates = [
+        "<|video_pad|>",
+        "<|video_placeholder|>",
+        "<|video|>",
+        "<video>",
+        "<|vision_pad|>",
+        "<|image_pad|>",  # 혹시 video가 image_pad로 들어오는 케이스 방어
+    ]
+    best = None
+    best_cnt = 0
+    for tok in candidates:
+        tid = tokenizer.convert_tokens_to_ids(tok)
+        if isinstance(tid, int) and tid >= 0:
+            cnt = int((input_ids_1d == tid).sum().item())
+            if cnt > best_cnt:
+                best_cnt = cnt
+                best = tid
+    if best is not None and best_cnt > 0:
+        return best
+
+    # fallback: additional_special_tokens 중 'video' 포함 토큰 탐색
+    try:
+        for tok in getattr(tokenizer, "additional_special_tokens", []) or []:
+            if "video" in tok.lower():
+                tid = tokenizer.convert_tokens_to_ids(tok)
+                if isinstance(tid, int) and tid >= 0:
+                    cnt = int((input_ids_1d == tid).sum().item())
+                    if cnt > 0:
+                        return tid
+    except Exception:
+        pass
+
+    return None
+
+
+def build_modality_masks(prompt_input_ids_1d: torch.Tensor, tokenizer) -> Tuple[torch.Tensor, torch.Tensor, int]:
+    """
+    prompt 구간(길이 = prompt_len)에서
+    - video_mask: video placeholder 위치
+    - text_mask: 나머지(간단히 ~video_mask)
+    반환.
+    """
+    vid_id = _guess_video_placeholder_id(tokenizer, prompt_input_ids_1d)
+    if vid_id is None:
+        video_mask = torch.zeros_like(prompt_input_ids_1d, dtype=torch.bool)
+        text_mask = torch.ones_like(prompt_input_ids_1d, dtype=torch.bool)
+        return video_mask, text_mask, -1
+
+    video_mask = (prompt_input_ids_1d == int(vid_id))
+    text_mask = ~video_mask
+    return video_mask, text_mask, int(vid_id)
+
+
+def effective_rank(x_2d: torch.Tensor, eps: float = 1e-12) -> float:
+    """
+    x: [N, D]
+    effective rank = exp( -sum_i p_i log p_i ), p_i = (s_i^2) / sum_j (s_j^2)
+    """
+    if x_2d.numel() == 0:
+        return 0.0
+    x = x_2d.float()
+    x = x - x.mean(dim=0, keepdim=True)
+    # SVD vals
+    s = torch.linalg.svdvals(x)  # [min(N,D)]
+    lam = (s ** 2)
+    denom = lam.sum().clamp_min(eps)
+    p = (lam / denom).clamp_min(eps)
+    h = -(p * p.log()).sum()
+    r = torch.exp(h)
+    return float(r.item())
+
+
+def sample_rows(x_2d: torch.Tensor, max_rows: int, seed: int = 0) -> torch.Tensor:
+    n = int(x_2d.shape[0])
+    if max_rows <= 0 or n <= max_rows:
+        return x_2d
+    g = torch.Generator(device="cpu")
+    g.manual_seed(seed)
+    idx = torch.randperm(n, generator=g)[:max_rows]
+    return x_2d[idx.to(x_2d.device)]
+
+
+def get_lm_layers(model) -> Optional[nn.ModuleList]:
+    """
+    Qwen2.5-VL / PEFT wrapper에서 transformer block list를 최대한 robust하게 찾기.
+    보통:
+      - base_model.model.layers
+      - model.model.layers
+      - model.base_model.model.model.layers (PEFT)
+    """
+    # unwrap peft
+    m = model
+    if hasattr(m, "base_model") and hasattr(m.base_model, "model"):
+        # PeftModel
+        m0 = m.base_model.model
+    else:
+        m0 = m
+
+    # try common paths
+    for cand in [
+        ("model", "layers"),
+        ("model", "model", "layers"),
+        ("language_model", "model", "layers"),
+        ("language_model", "layers"),
+        ("transformer", "layers"),
+        ("model", "decoder", "layers"),
+    ]:
+        obj = m0
+        ok = True
+        for attr in cand:
+            if not hasattr(obj, attr):
+                ok = False
+                break
+            obj = getattr(obj, attr)
+        if ok and isinstance(obj, (list, nn.ModuleList)):
+            return obj
+
+    return None
+
+
+class BlockOutputCollector:
+    """
+    특정 transformer block들의 output hidden을 hook으로 받아 저장.
+    (output_hidden_states=True 없이도 last/중간 hidden을 얻기 위함)
+    """
+    def __init__(self, layers: nn.ModuleList, pick_indices: List[int]):
+        self.layers = layers
+        self.pick = sorted(list(set(int(i) for i in pick_indices)))
+        self.handles = []
+        self.outputs: Dict[int, torch.Tensor] = {}
+
+    def _make_hook(self, layer_idx: int):
+        def hook(_module, _inp, out):
+            # out이 tuple이면 첫 원소가 hidden인 경우가 많음
+            h = out[0] if isinstance(out, (tuple, list)) else out
+            if isinstance(h, torch.Tensor):
+                self.outputs[layer_idx] = h
+        return hook
+
+    def register(self):
+        for i in self.pick:
+            if 0 <= i < len(self.layers):
+                self.handles.append(self.layers[i].register_forward_hook(self._make_hook(i)))
+
+    def remove(self):
+        for h in self.handles:
+            try:
+                h.remove()
+            except Exception:
+                pass
+        self.handles = []
+
+
+def layer_groups(num_layers: int) -> Dict[str, List[int]]:
+    if num_layers <= 0:
+        return {"early": [], "middle": [], "late": [], "all": []}
+    early = [0, 1] if num_layers >= 2 else [0]
+    mid0 = max(0, num_layers // 2 - 1)
+    middle = [mid0, min(num_layers - 1, mid0 + 1)] if num_layers >= 2 else [0]
+    late = [max(0, num_layers - 2), num_layers - 1] if num_layers >= 2 else [0]
+    all_layers = list(range(num_layers))
+    return {"early": early, "middle": middle, "late": late, "all": all_layers}
+
+
+@torch.no_grad()
+def compute_stats_for_example(
+    model,
+    tokenizer,
+    prompt_inputs: Dict[str, torch.Tensor],   # prompt only (sliced to prompt_len)
+    out_ids: torch.Tensor,                    # [1, prompt_len + gen_len]
+    prompt_len: int,
+    rank_max_tokens: int,
+    stats_max_steps: int,
+    stats_stride: int,
+    amp_dtype=torch.float16,
+) -> Dict[str, Any]:
+    """
+    - effective rank (text/video) from selected block outputs (early/middle/late/last)
+    - MDI/AEI from step-wise attentions over generated tokens (teacher forcing)
+    """
+    device = out_ids.device
+    prompt_ids_1d = prompt_inputs["input_ids"][0]  # [prompt_len]
+    vmask, tmask, vid_id = build_modality_masks(prompt_ids_1d, tokenizer)
+    vmask = vmask.to(device)
+    tmask = tmask.to(device)
+    n_video = int(vmask.sum().item())
+    n_text = int(tmask.sum().item())
+    n_total = n_video + n_text
+
+    # identify LM layers
+    layers = get_lm_layers(model)
+    num_layers = len(layers) if layers is not None else 0
+    groups = layer_groups(num_layers)
+
+    # -------- effective rank via hooks (no output_hidden_states=True) --------
+    rank_res: Dict[str, Any] = {}
+    if layers is not None and num_layers > 0:
+        # 대표 레이어 인덱스: early(1), middle(mid last), late(last), last(last)
+        pick = [
+            groups["early"][-1],
+            groups["middle"][-1],
+            groups["late"][-1],
+        ]
+        pick = sorted(list(set(pick)))
+        collector = BlockOutputCollector(layers, pick)
+        collector.register()
+
+        try:
+            with torch.cuda.amp.autocast(enabled=torch.cuda.is_available(), dtype=amp_dtype):
+                # prefill forward: cache 생성 + hook으로 hidden 획득
+                #pre = model(**prompt_inputs, use_cache=True, output_attentions=False, return_dict=True)
+                prefill_inputs = dict(prompt_inputs)
+                prefill_inputs.setdefault("use_cache", True)
+                pre = model(**prefill_inputs, output_attentions=False, return_dict=True)
+        finally:
+            collector.remove()
+
+        # collector.outputs[layer_idx] : [1, prompt_len, D]
+        for li in pick:
+            h = collector.outputs.get(li, None)
+            if h is None:
+                continue
+            h_prompt = h[0, :prompt_len]  # [prompt_len, D]
+            h_text = h_prompt[tmask]
+            h_video = h_prompt[vmask]
+            Nt = int(h_text.shape[0])
+            Nv = int(h_video.shape[0])
+
+            # (옵션) 너무 긴 텍스트를 대비해 상한 적용: 둘 다 같은 N으로 맞추기 위해 target_n을 정의
+            target_n = Nt
+            if rank_max_tokens > 0:
+                target_n = min(target_n, int(rank_max_tokens))
+
+            if target_n <= 0:
+                er_text = 0.0
+                er_video = 0.0
+            else:
+                # text도 target_n으로 맞춤 (Nt가 target_n보다 크면 subsample)
+                h_text2 = sample_rows(h_text, target_n, seed=0) if Nt > target_n else h_text
+                # video는 mean-pool로 target_n으로 축소
+                h_video2 = downsample_tokens_meanpool(h_video, target_n) if Nv > target_n else h_video
+
+                er_text = effective_rank(h_text2) if h_text2.numel() > 0 else 0.0
+                er_video = effective_rank(h_video2) if h_video2.numel() > 0 else 0.0
+
+                print("after downsampling: ", Nt, Nv, er_text, er_video)
+
+            rank_res[f"effrank_text_L{li}"] = er_text
+            rank_res[f"effrank_video_to_text_L{li}"] = er_video
+            rank_res[f"rank_target_n_L{li}"] = int(target_n)
+            rank_res[f"Nt_L{li}"] = int(Nt)
+            rank_res[f"Nv_L{li}"] = int(Nv)
+
+        past = getattr(pre, "past_key_values", None)
+        attn_mask = prompt_inputs.get("attention_mask", torch.ones_like(prompt_inputs["input_ids"]))
+    else:
+        past = None
+        attn_mask = prompt_inputs.get("attention_mask", torch.ones_like(prompt_inputs["input_ids"]))
+
+    # -------- MDI/AEI via step-wise attentions --------
+    # init accumulators
+    acc = {}
+    for gname in ["early", "middle", "late", "all"]:
+        acc[gname] = {"t": 0.0, "v": 0.0, "cnt": 0}
+
+    if past is None or num_layers == 0 or n_total <= 0 or n_video <= 0:
+        # video 토큰이 없으면 MDI는 정의가 애매(division by 0)
+        # 그래도 AEI/MDI를 스킵하고 rank만 반환하도록 처리
+        return {
+            "n_text_tokens": n_text,
+            "n_video_tokens": n_video,
+            "video_token_id": vid_id,
+            "num_layers": num_layers,
+            **rank_res,
+            "mdi_early": None, "mdi_middle": None, "mdi_late": None, "mdi_all": None,
+            "aei_text_early": None, "aei_text_middle": None, "aei_text_late": None, "aei_text_all": None,
+            "aei_video_early": None, "aei_video_middle": None, "aei_video_late": None, "aei_video_all": None,
+            "stats_steps_used": 0,
+        }
+
+    # generated token ids (query tokens)
+    gen_ids = out_ids[0, prompt_len:]
+    if stats_max_steps > 0:
+        gen_ids = gen_ids[:stats_max_steps]
+    if stats_stride > 1:
+        gen_ids = gen_ids[::stats_stride]
+    steps_used = int(gen_ids.numel())
+
+    # attention mask grows by 1 each step
+    cur_mask = attn_mask
+    cur_past = past
+
+    eps = 1e-12
+    for si in range(steps_used):
+        tok_id = gen_ids[si].view(1, 1)  # [1,1]
+        one = torch.ones((1, 1), dtype=cur_mask.dtype, device=device)
+        cur_mask = torch.cat([cur_mask, one], dim=1)
+
+        # some models want prepared inputs (position_ids etc.)
+        try:
+            model_inputs = model.prepare_inputs_for_generation(
+                input_ids=tok_id,
+                past_key_values=cur_past,
+                attention_mask=cur_mask,
+                #use_cache=True,
+            )
+        except Exception:
+            model_inputs = {
+                "input_ids": tok_id,
+                "past_key_values": cur_past,
+                "attention_mask": cur_mask,
+                #"use_cache": True,
+            }
+        model_inputs.setdefault("use_cache", True)
+
+        with torch.cuda.amp.autocast(enabled=torch.cuda.is_available(), dtype=amp_dtype):
+            out = model(**model_inputs, output_attentions=True, return_dict=True)#, use_cache=True)
+
+        cur_past = getattr(out, "past_key_values", cur_past)
+        atts = getattr(out, "attentions", None)
+        if atts is None:
+            # output_attentions를 지원 못하거나 eager로 안 떨어진 경우
+            break
+
+        # atts: tuple(len=num_layers), each [1, H, 1, kv_len]
+        for gname, layer_ids in groups.items():
+            if len(layer_ids) == 0:
+                continue
+            for li in layer_ids:
+                if li < 0 or li >= len(atts):
+                    continue
+                a = atts[li]
+                if not isinstance(a, torch.Tensor) or a.dim() != 4:
+                    continue
+                # prompt keys only: [:prompt_len]
+                a_prompt = a[..., :prompt_len]  # [1,H,1,prompt_len]
+                # modality masses
+                t_mass = a_prompt[..., tmask].sum(dim=-1)  # [1,H,1]
+                v_mass = a_prompt[..., vmask].sum(dim=-1)  # [1,H,1]
+                denom = (t_mass + v_mass).clamp_min(eps)
+
+                # per-step normalized share over (text+video prompt tokens)
+                t_share = (t_mass / denom).mean(dim=1).squeeze().item()
+                v_share = (v_mass / denom).mean(dim=1).squeeze().item()
+
+                acc[gname]["t"] += float(t_share)
+                acc[gname]["v"] += float(v_share)
+                acc[gname]["cnt"] += 1
+
+        del out, atts
+        gc.collect()
+        torch.cuda.empty_cache()
+
+    def finalize_group(gname: str) -> Tuple[Optional[float], Optional[float], Optional[float]]:
+        cnt = acc[gname]["cnt"]
+        if cnt <= 0 or n_total <= 0 or n_video <= 0 or n_text <= 0:
+            return None, None, None
+        A_text = acc[gname]["t"] / cnt
+        A_video = acc[gname]["v"] / cnt
+        # normalize to be safe
+        s = max(eps, A_text + A_video)
+        A_text /= s
+        A_video /= s
+
+        mdi = (A_text / n_text) / max(eps, (A_video / n_video))
+
+        token_share_text = n_text / n_total
+        token_share_video = n_video / n_total
+        aei_text = A_text / max(eps, token_share_text)
+        aei_video = A_video / max(eps, token_share_video)
+        return float(mdi), float(aei_text), float(aei_video)
+
+    out_stats: Dict[str, Any] = {
+        "n_text_tokens": n_text,
+        "n_video_tokens": n_video,
+        "video_token_id": vid_id,
+        "num_layers": num_layers,
+        "stats_steps_used": steps_used,
+        **rank_res,
+    }
+
+    for gname in ["early", "middle", "late", "all"]:
+        mdi, aei_t, aei_v = finalize_group(gname)
+        out_stats[f"mdi_{gname}"] = mdi
+        out_stats[f"aei_text_{gname}"] = aei_t
+        out_stats[f"aei_video_{gname}"] = aei_v
+
+    return out_stats
 
 
 # -------------------------
@@ -378,11 +799,15 @@ def run_eval(
     top_p: float,
     print_every: int,
     out_jsonl: Optional[Path],
+    # NEW
+    collect_stats: bool,
+    rank_max_tokens: int,
+    stats_max_steps: int,
+    stats_stride: int,
 ) -> Dict[str, Any]:
     tok = processor.tokenizer
     model.eval()
 
-    # generation cache on
     old_cache = getattr(model.config, "use_cache", None)
     model.config.use_cache = True
 
@@ -391,6 +816,10 @@ def run_eval(
     sum_f1 = 0.0
     n_fail = 0
 
+    # NEW: stats aggregation
+    stat_n = 0
+    stat_sums: Dict[str, float] = {}
+
     jf = None
     if out_jsonl is not None:
         out_jsonl.parent.mkdir(parents=True, exist_ok=True)
@@ -398,7 +827,6 @@ def run_eval(
 
     try:
         for it, batch in enumerate(loader):
-            # batch is dict (cached), move tensors
             bt: Dict[str, Any] = {}
             for k, v in batch.items():
                 if isinstance(v, torch.Tensor):
@@ -423,7 +851,7 @@ def run_eval(
 
             gt = decode_gt_from_full_ids(ids_1d, prompt_len, tok)
 
-            # build generation inputs: slice seq-aligned tensors to prompt_len
+            # generation inputs: slice seq-aligned tensors to prompt_len
             gen_batch = _slice_seq_aligned_tensors(bt, prompt_len)
             gen_inputs = {k: v for k, v in gen_batch.items() if k != "labels"}
 
@@ -456,6 +884,32 @@ def run_eval(
             sum_em += em
             sum_f1 += f1
 
+            # NEW: compute stats
+            stats = None
+            if collect_stats:
+                try:
+                    # prompt-only inputs already (gen_inputs) + out_ids from generate
+                    stats = compute_stats_for_example(
+                        model=model,
+                        tokenizer=tok,
+                        prompt_inputs=gen_inputs,
+                        out_ids=out_ids if out_ids.dim() == 2 else out_ids.unsqueeze(0),
+                        prompt_len=prompt_len,
+                        rank_max_tokens=rank_max_tokens,
+                        stats_max_steps=stats_max_steps,
+                        stats_stride=stats_stride,
+                        amp_dtype=torch.float16,
+                    )
+                    # aggregate means for numeric entries
+                    for k, v in stats.items():
+                        if isinstance(v, (int, float)) and v is not None and math.isfinite(float(v)):
+                            stat_sums[k] = stat_sums.get(k, 0.0) + float(v)
+                    stat_n += 1
+                except Exception as e:
+                    if (it + 1) % max(1, print_every) == 0:
+                        print(f"[STATS] failed at iter={it}: {repr(e)}")
+                    stats = None
+
             if (print_every > 0) and (n % print_every == 0):
                 q = bt.get("question", "")
                 print("=" * 80)
@@ -467,6 +921,17 @@ def run_eval(
                 print(gt)
                 print("- PRED -----------------------------")
                 print(pred)
+                if stats is not None:
+                    print("- STATS (late/all) ------------------")
+                    print({
+                        "mdi_late": stats.get("mdi_late", None),
+                        "aei_text_late": stats.get("aei_text_late", None),
+                        "effrank_text_last": stats.get("effrank_text_L{}".format(stats.get("num_layers", 0)-1), None),
+                        "effrank_video_last": stats.get("effrank_video_L{}".format(stats.get("num_layers", 0)-1), None),
+                        "n_text_tokens": stats.get("n_text_tokens", None),
+                        "n_video_tokens": stats.get("n_video_tokens", None),
+                        "steps_used": stats.get("stats_steps_used", None),
+                    })
                 print("=" * 80)
 
             if jf is not None:
@@ -479,6 +944,8 @@ def run_eval(
                     "em": em,
                     "f1": f1,
                 }
+                if stats is not None:
+                    rec.update(stats)
                 jf.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
     finally:
@@ -493,6 +960,15 @@ def run_eval(
         "EM": (sum_em / n) if n > 0 else 0.0,
         "F1": (sum_f1 / n) if n > 0 else 0.0,
     }
+
+    # NEW: mean stats
+    if collect_stats and stat_n > 0:
+        means = {}
+        for k, s in stat_sums.items():
+            means[f"mean_{k}"] = s / stat_n
+        out["stats_n"] = stat_n
+        out.update(means)
+
     return out
 
 
@@ -505,8 +981,7 @@ def main():
     ap.add_argument("--base_dir", type=str, default="/home/hice1/skim3513/scratch/hallucination-detection")
     ap.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-VL-7B-Instruct")
 
-    # checkpoint (LoRA adapter dir)
-    ap.add_argument("--ckpt_dir", type=str, required=True, help="e.g., .../qwen25vl_mmbench_video/.../final or checkpoint_step_xxx")
+    ap.add_argument("--ckpt_dir", type=str, required=True, help="e.g., .../final or checkpoint_step_xxx")
 
     ap.add_argument("--dataset_name", type=str, default="lscpku/MMBench-Video")
     ap.add_argument("--split", type=str, default="test")
@@ -535,6 +1010,16 @@ def main():
     ap.add_argument("--print_every", type=int, default=50)
     ap.add_argument("--out_jsonl", type=str, default="")
 
+    # NEW: collect stats (effective rank / MDI / AEI)
+    ap.add_argument("--collect_stats", action="store_true",
+                    help="Compute effective-rank(video/text) and MDI/AEI during evaluation.")
+    ap.add_argument("--rank_max_tokens", type=int, default=512,
+                    help="Subsample max tokens per modality for effective-rank computation.")
+    ap.add_argument("--stats_max_steps", type=int, default=64,
+                    help="How many generated tokens to use for MDI/AEI (<= max_new_tokens).")
+    ap.add_argument("--stats_stride", type=int, default=1,
+                    help="Use every k-th generated token for stats (speed/accuracy tradeoff).")
+
     args = ap.parse_args()
 
     if QwenVLModelClass is None:
@@ -547,8 +1032,7 @@ def main():
     if not ckpt_dir.exists():
         raise FileNotFoundError(f"ckpt_dir not found: {ckpt_dir}")
 
-    # processor: prefer ckpt_dir (you saved processor there)
-    # keep pixels consistent with training if ckpt processor load fails
+    # processor
     try:
         processor = AutoProcessor.from_pretrained(str(ckpt_dir))
     except Exception:
@@ -581,9 +1065,15 @@ def main():
         model_kwargs["torch_dtype"] = torch.float16 if torch.cuda.is_available() else torch.float32
 
     base_model = QwenVLModelClass.from_pretrained(args.model_name, **model_kwargs)
-    base_model.config.use_cache = True  # generation
+    base_model.config.use_cache = True
 
-    # attach LoRA
+    # force eager attention if possible (output_attentions 안정성 ↑)
+    try:
+        if hasattr(base_model.config, "attn_implementation"):
+            base_model.config.attn_implementation = "eager"
+    except Exception:
+        pass
+
     try:
         model = PeftModel.from_pretrained(base_model, str(ckpt_dir))
     except Exception as e:
@@ -594,6 +1084,11 @@ def main():
         )
 
     model.eval()
+    try:
+        if hasattr(model.config, "attn_implementation"):
+            model.config.attn_implementation = "eager"
+    except Exception:
+        pass
 
     # videos root
     videos_root = Path(args.videos_dir).resolve() if args.videos_dir else (base_dir / "mmbench_video_assets")
@@ -618,7 +1113,7 @@ def main():
                         and isinstance(ex.get("video_path", None), str))
     print("Rows:", len(ds))
 
-    cache_dir = Path(args.cache_dir).resolve() if args.cache_dir else (base_dir / "mmbench_video_eval_cache")
+    cache_dir = Path(args.cache_dir).resolve() if args.cache_dir else (base_dir / "mmbench_video_eval_cache_fixed")
     if args.build_cache:
         build_mmbench_video_eval_cache(
             ds=ds,
@@ -659,6 +1154,10 @@ def main():
         top_p=args.top_p,
         print_every=args.print_every,
         out_jsonl=out_jsonl,
+        collect_stats=args.collect_stats,
+        rank_max_tokens=args.rank_max_tokens,
+        stats_max_steps=args.stats_max_steps,
+        stats_stride=args.stats_stride,
     )
 
     print("\n=== FINAL RESULTS ===")
@@ -669,7 +1168,7 @@ def main():
     summary_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
     print("Saved summary:", str(summary_path))
     if out_jsonl is not None:
-        print("Saved predictions:", str(out_jsonl))
+        print("Saved predictions+stats:", str(out_jsonl))
 
 
 if __name__ == "__main__":

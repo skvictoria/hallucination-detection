@@ -6,20 +6,18 @@ export TRANSFORMERS_CACHE="/home/hice1/skim3513/scratch/hallucination-detection/
 
 
 python3 step3_eval_wacv_mmbench-video.py \
-  --adapter_dir /home/hice1/skim3513/scratch/hallucination-detection/qwen25vl_mmbench_video/llm_attn/final \
-  --max_eval_samples 200 \
-  --nframes 4 \
-  --video_max_pixels $((128*28*28)) \
-  --max_length 8192 \
-  --max_new_tokens 64 \
-  --force_video_reader decord
-
+  --ckpt_dir /home/hice1/skim3513/scratch/hallucination-detection/qwen25vl_mmbench_video/llm_attn/final \
+  --build_cache --use_cache \
+  --cache_dir /home/hice1/skim3513/scratch/hallucination-detection/mmbench_video_eval_cache_fixed \
+  --max_eval_samples 400 \
+  --num_frames 4 --video_backend decord \
+  --max_length 1400 \
+  --auto_download_videos
 
 # python3 step3_eval_wacv_mmbench-video.py \
-#   --ckpt_dir /home/hice1/skim3513/scratch/hallucination-detection/qwen25vl_mmbench_video/llm_attn/checkpoint_step_1000 \
-#   --videos_dir /home/hice1/skim3513/scratch/hallucination-detection/mmbench_video_assets \
+#   --ckpt_dir /home/hice1/skim3513/scratch/hallucination-detection/qwen25vl_mmbench_video/llm_attn/final \
 #   --use_cache \
-#   --fps 1 \
-#   --num_frames 4 \
-#   --max_new_tokens 64
-
+#   --cache_dir /home/hice1/skim3513/scratch/hallucination-detection/mmbench_video_eval_cache_fixed \
+#   --max_new_tokens 64 \
+#   --out_jsonl /home/hice1/skim3513/scratch/hallucination-detection/qwen25vl_mmbench_video/outputs/mmbench_video_preds.jsonl \
+#   --print_every 50

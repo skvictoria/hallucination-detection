@@ -42,4 +42,6 @@ python3 step3_train_wacv_mmbench-video.py \
   --batch_size 1 \
   --device cuda:0 \
   --device_map cuda:0 \
-  --rtf_disable
+  --rtf_disable \
+  --preview_every 2 \
+  --preview_max_new_tokens 64

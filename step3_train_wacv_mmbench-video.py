@@ -37,7 +37,22 @@ try:
 except Exception:
     HAS_HF_HUB = False
 
+def _find_last_subsequence(haystack: torch.Tensor, needle: torch.Tensor) -> Optional[int]:
+    L = int(haystack.numel()); M = int(needle.numel())
+    if M <= 0 or M > L:
+        return None
+    for s in range(L - M, -1, -1):
+        if torch.equal(haystack[s:s+M], needle):
+            return int(s)
+    return None
 
+def infer_prompt_len_from_marker(input_ids_1d: torch.Tensor, tokenizer) -> int:
+    for mt in ["<|im_start|>assistant\n", "<|im_start|>assistant"]:
+        m = tokenizer(mt, add_special_tokens=False, return_tensors="pt")["input_ids"][0].to(input_ids_1d.device)
+        pos = _find_last_subsequence(input_ids_1d, m)
+        if pos is not None:
+            return int(pos + m.numel())
+    return -1
 # -------------------------
 # HF cache setup
 # -------------------------
@@ -94,25 +109,34 @@ def find_projector_linear_module_names(model) -> List[str]:
     return out
 
 
+def find_lm_linear_fullnames(model, suffixes):
+    targets = []
+    for name, mod in model.named_modules():
+        if isinstance(mod, torch.nn.Linear):
+            if "language_model" in name and any(name.endswith(s) for s in suffixes):
+                targets.append(name)
+    if len(targets) == 0:
+        raise RuntimeError("No language_model linear targets found. Check module naming.")
+    return targets
+
 def build_lora_targets(model, placement: str) -> List[str]:
     placement = placement.lower()
     attn = ["q_proj", "k_proj", "v_proj", "o_proj"]
-    mlp = ["gate_proj", "up_proj", "down_proj"]
+    mlp  = ["gate_proj", "up_proj", "down_proj"]
     proj_fullnames = find_projector_linear_module_names(model)
 
     if placement == "llm_attn":
-        return attn
+        return find_lm_linear_fullnames(model, attn)
     if placement == "llm_mlp":
-        return mlp
+        return find_lm_linear_fullnames(model, mlp)
     if placement == "projector":
         if len(proj_fullnames) == 0:
-            raise RuntimeError("Could not find projector/visual Linear modules. Inspect model.named_modules().")
+            raise RuntimeError("Could not find projector/visual Linear modules.")
         return proj_fullnames
     if placement == "all":
-        if len(proj_fullnames) == 0:
-            raise RuntimeError("Could not find projector/visual Linear modules. Inspect model.named_modules().")
-        return attn + mlp
-    raise ValueError(f"Unknown placement: {placement}. Use llm_attn, llm_mlp, projector, all")
+        return find_lm_linear_fullnames(model, attn + mlp) + proj_fullnames
+    raise ValueError(...)
+
 
 
 # =========================================================
@@ -616,7 +640,6 @@ def build_mmbench_video_cache(
             truncation=True,
             max_length=max_length,
         )["input_ids"]
-        prompt_len = int(prompt_ids.shape[1])
 
         enc = processor.apply_chat_template(
             full_conv,
@@ -642,6 +665,11 @@ def build_mmbench_video_cache(
                   f"Reduce num_frames/max_pixels or increase max_length.")
             continue
 
+        prompt_len = infer_prompt_len_from_marker(input_ids[0], tokenizer)
+        if prompt_len < 0:
+            print(f"[SKIP] cannot find assistant marker idx={idx}")
+            continue
+
         attention_mask = enc.get("attention_mask", None)
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
@@ -650,6 +678,7 @@ def build_mmbench_video_cache(
         labels[:, :prompt_len] = -100
         if int((labels != -100).sum().item()) == 0:
             labels[:, -1] = input_ids[:, -1]
+
 
         # 저장할 payload 구성
         payload = {
@@ -675,23 +704,75 @@ def build_mmbench_video_cache(
 
 def _slice_seq_aligned_tensors(batch: Dict[str, torch.Tensor], new_L: int) -> Dict[str, torch.Tensor]:
     """
-    input_ids처럼 [B, L] 형태의 시퀀스 정렬 텐서는 L 차원을 new_L로 잘라서 반환.
-    그 외(video_grid_thw, pixel_values_videos 등)는 그대로 둠.
+    input_ids 길이(L)에 정렬되는 텐서들은 new_L로 함께 자른다.
+    - [1, L], [1, 3, L], [3, L], [L] 같은 케이스를 폭넓게 처리
+    - pixel_values_videos / video_grid_thw / second_per_grid_ts 등은 L과 무관하니 그대로 둔다.
     """
+    assert "input_ids" in batch and isinstance(batch["input_ids"], torch.Tensor)
+    old_L = int(batch["input_ids"].shape[-1])
+
+    keep_keys = {"pixel_values_videos", "video_grid_thw", "second_per_grid_ts"}
     out = {}
+
     for k, v in batch.items():
         if not isinstance(v, torch.Tensor):
             continue
-        if v.dim() >= 2 and v.shape[0] == 1:
-            # [1, L] 또는 [1, L, ...] 인데 L이 seq_len인 경우만 자름
-            if k in ["input_ids", "attention_mask", "position_ids", "token_type_ids"]:
-                out[k] = v[:, :new_L]
-            else:
-                out[k] = v
-        else:
+        if k in keep_keys:
             out[k] = v
+            continue
+
+        # [1, L] or [B, L]
+        if v.dim() == 2 and v.shape[-1] == old_L:
+            out[k] = v[..., :new_L]
+            continue
+
+        # [1, 3, L] or [B, 3, L]
+        if v.dim() == 3 and v.shape[-1] == old_L:
+            out[k] = v[..., :new_L]
+            continue
+
+        # [3, L] (position_ids가 이런 식으로 오는 경우)
+        if v.dim() == 2 and v.shape[0] == 3 and v.shape[1] == old_L:
+            out[k] = v[:, :new_L]
+            continue
+
+        # [L]
+        if v.dim() == 1 and v.shape[0] == old_L:
+            out[k] = v[:new_L]
+            continue
+
+        out[k] = v
+
     return out
 
+def _find_last_subsequence(haystack_1d: torch.Tensor, needle_1d: torch.Tensor) -> Optional[int]:
+    """
+    haystack 안에서 needle이 등장하는 '마지막' 시작 인덱스를 반환.
+    """
+    L = int(haystack_1d.numel())
+    M = int(needle_1d.numel())
+    if M <= 0 or M > L:
+        return None
+    for s in range(L - M, -1, -1):
+        if torch.equal(haystack_1d[s:s+M], needle_1d):
+            return int(s)
+    return None
+
+
+
+def _find_answer_start_by_suffix(full_ids_1d: torch.Tensor, ans_ids_1d: torch.Tensor) -> Optional[int]:
+    """
+    full_ids 안에서 ans_ids가 등장하는 마지막 위치를 찾아 시작 인덱스를 반환.
+    """
+    L = int(full_ids_1d.numel())
+    M = int(ans_ids_1d.numel())
+    if M <= 0 or M > L:
+        return None
+
+    for s in range(L - M, -1, -1):
+        if torch.equal(full_ids_1d[s:s+M], ans_ids_1d):
+            return int(s)
+    return None
 
 @torch.no_grad()
 def preview_generation(
@@ -702,39 +783,65 @@ def preview_generation(
     max_new_tokens: int = 64,
     prompt_chars: int = 400,
 ):
-    """
-    batch(캐시/온라인 모두 가능)에서 prompt_len을 labels로 복원하고,
-    prompt까지만 잘라 generate해서 GT/PRED를 출력.
-    """
-    # labels가 없으면 preview 불가 (온라인 데이터에서 labels 만들지 않는 경우 등)
-    if "labels" not in batch or "input_ids" not in batch:
-        print(f"[PREVIEW {step_str}] skip: batch has no labels/input_ids")
+    if "input_ids" not in batch:
+        print(f"[PREVIEW {step_str}] skip: batch has no input_ids")
         return
 
-    input_ids = batch["input_ids"]
-    labels = batch["labels"]
-
-    # prompt_len 복원: labels==-100인 prefix 길이
-    # labels shape: [1, L]
-    prompt_len = int((labels[0] == -100).sum().item())
+    input_ids = batch["input_ids"]  # [1, L]
     L = int(input_ids.shape[1])
+    if L < 16:
+        print(f"[PREVIEW {step_str}] skip: too short L={L}")
+        return
+
+    tok = processor.tokenizer
+    ids_1d = input_ids[0]
+
+    # 1) assistant 답변 시작 마커를 input_ids에서 찾기
+    #    (chat_template 상 보통 "<|im_start|>assistant\n" 이후에 답변이 바로 옴)
+    marker_texts = ["<|im_start|>assistant\n", "<|im_start|>assistant"]
+    prompt_len = None
+    used_marker = None
+
+    for mt in marker_texts:
+        m_ids = tok(mt, add_special_tokens=False, return_tensors="pt")["input_ids"][0].to(ids_1d.device)
+        pos = _find_last_subsequence(ids_1d, m_ids)
+        if pos is not None:
+            prompt_len = int(pos + int(m_ids.numel()))
+            used_marker = mt
+            break
+
+    if prompt_len is None or prompt_len <= 0 or prompt_len >= L:
+        # fallback: labels 기반(하지만 네 상황에선 보통 틀림)
+        if "labels" in batch:
+            prompt_len_guess = int((batch["labels"][0] == -100).sum().item())
+            print(f"[PREVIEW {step_str}] WARN: marker not found, fallback prompt_len={prompt_len_guess}/{L}")
+            prompt_len = prompt_len_guess
+        else:
+            print(f"[PREVIEW {step_str}] skip: cannot infer prompt_len (no marker, no labels)")
+            return
+
     if prompt_len <= 0 or prompt_len >= L:
         print(f"[PREVIEW {step_str}] skip: bad prompt_len={prompt_len}, L={L}")
         return
 
-    # GT answer 디코딩 (prompt 이후)
-    gt_ids = input_ids[0, prompt_len:]
-    gt_text = processor.tokenizer.decode(gt_ids, skip_special_tokens=True).strip()
-
-    # prompt 디코딩 (끝부분만)
-    prompt_ids = input_ids[0, :prompt_len]
-    prompt_text = processor.tokenizer.decode(prompt_ids, skip_special_tokens=True)
+    # 2) PROMPT 텍스트(끝부분) 디코딩
+    prompt_ids = ids_1d[:prompt_len]
+    prompt_text = tok.decode(prompt_ids, skip_special_tokens=True)
     prompt_tail = prompt_text[-prompt_chars:] if len(prompt_text) > prompt_chars else prompt_text
 
-    # generate는 prompt까지만 넣기
-    gen_batch = _slice_seq_aligned_tensors(batch, prompt_len)
+    # 3) GT 텍스트: prompt 이후부터 <|im_end|> 전까지 (있으면)
+    im_end_id = tok.convert_tokens_to_ids("<|im_end|>")
+    ans_ids_full = ids_1d[prompt_len:]
+    if isinstance(im_end_id, int) and im_end_id >= 0:
+        end_pos = (ans_ids_full == im_end_id).nonzero(as_tuple=False)
+        if end_pos.numel() > 0:
+            ans_ids_full = ans_ids_full[: int(end_pos[0].item())]
+    gt_text = tok.decode(ans_ids_full, skip_special_tokens=True).strip()
 
-    # generate가 training config(use_cache=False)에서 느릴 수 있어서 잠깐만 True로
+    # 4) generate 입력 만들기: prompt_len에 맞춰 "시퀀스 정렬 텐서"를 함께 자르기
+    gen_batch = _slice_seq_aligned_tensors(batch, prompt_len)
+    gen_inputs = {k: v for k, v in gen_batch.items() if k != "labels"}
+
     old_cache = getattr(model.config, "use_cache", None)
     model.config.use_cache = True
     was_training = model.training
@@ -743,21 +850,24 @@ def preview_generation(
     try:
         with torch.cuda.amp.autocast(enabled=torch.cuda.is_available(), dtype=torch.float16):
             out_ids = model.generate(
-                **{k: v for k, v in gen_batch.items() if k != "labels"},
+                **gen_inputs,
                 max_new_tokens=max_new_tokens,
                 do_sample=False,
             )
 
-        # 어떤 경우는 prompt 포함, 어떤 경우는 new tokens only일 수 있어 방어
+        # HF 문서 예시처럼 "입력 길이만큼 잘라 new tokens만" 사용 :contentReference[oaicite:1]{index=1}
         if out_ids.shape[1] > prompt_len:
             gen_part = out_ids[0, prompt_len:]
         else:
             gen_part = out_ids[0]
 
-        pred_text = processor.tokenizer.decode(gen_part, skip_special_tokens=True).strip()
+        pred_text = tok.decode(gen_part, skip_special_tokens=True).strip()
 
         print("\n" + "=" * 80)
-        print(f"[PREVIEW {step_str}] prompt_len={prompt_len} full_L={L} gen_len={int(gen_part.numel())}")
+        if used_marker is not None:
+            print(f"[PREVIEW {step_str}] marker={used_marker!r} prompt_len={prompt_len} full_L={L} gen_len={int(gen_part.numel())}")
+        else:
+            print(f"[PREVIEW {step_str}] prompt_len={prompt_len} full_L={L} gen_len={int(gen_part.numel())}")
         print("- PROMPT (tail) ----------------------------------------")
         print(prompt_tail)
         print("- GT ---------------------------------------------------")
@@ -773,6 +883,8 @@ def preview_generation(
             model.train()
         if old_cache is not None:
             model.config.use_cache = old_cache
+
+
 
 
 # -------------------------
@@ -849,7 +961,7 @@ def main():
     base_dir = Path(args.base_dir).resolve()
     paths = setup_hf_cache(base_dir)
 
-    out_dir = Path(args.output_dir).resolve() if args.output_dir else (base_dir / "qwen25vl_mmbench_video" / args.placement)
+    out_dir = Path(args.output_dir).resolve() if args.output_dir else (base_dir / "qwen25vl_mmbench_video/baseline" / args.placement)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     min_pixels = 128 * 28 * 28
@@ -1036,6 +1148,13 @@ def main():
             loss = loss_task / args.grad_accum
             loss.backward()
             running_loss += float(loss_task.item())
+
+            if (step + 1) % args.grad_accum == 0:
+                total_gn = 0.0
+                for n, p in model.named_parameters():
+                    if "lora_" in n and p.grad is not None:
+                        total_gn += float(p.grad.data.norm(2).item())
+                print(f"[DBG] update_step={update_step+1} lora_grad_norm_sum={total_gn:.4f}")
 
             if (step + 1) % args.grad_accum == 0:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
